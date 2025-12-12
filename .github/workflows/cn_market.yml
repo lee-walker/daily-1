@@ -2,9 +2,8 @@ name: CN Market Data Notification
 
 on:
   schedule:
-    # 每天下午15:10执行（UTC时间需要转换）
-    - cron: '10 7 * * *'  # UTC时间07:10对应北京时间15:10
-  workflow_dispatch:  # 允许手动触发
+    - cron: '10 7 * * 1-5'
+  workflow_dispatch:
 
 jobs:
   notify-cn-market:
@@ -22,50 +21,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         
     - name: Get CN market data and send notification
       env:
         BARK_URL: ${{ secrets.BARK_URL }}
-      run: |
-        python -c "
-import sys
-sys.path.append('./src')
-from scraper import MarketDataScraper
-from bark_notifier import BarkNotifier
-from config import Config
-
-try:
-    # 检查是否为交易日
-    if not MarketDataScraper.is_trading_day():
-        print('今天不是交易日，跳过推送')
-        sys.exit(0)
-    
-    # 获取国内股市数据
-    print('正在获取A股数据...')
-    cn_data = MarketDataScraper.get_cn_market_data(Config.CN_INDICES)
-    
-    if not cn_data:
-        print('未能获取到A股数据')
-        sys.exit(1)
-    
-    # 格式化数据
-    content = MarketDataScraper.format_market_data(cn_data, 'cn')
-    print('格式化后的数据:')
-    print(content)
-    
-    # 发送推送
-    notifier = BarkNotifier()
-    success = notifier.send_stock_notification(content, 'cn')
-    
-    if success:
-        print('A股数据推送成功')
-        sys.exit(0)
-    else:
-        print('A股数据推送失败')
-        sys.exit(1)
-        
-except Exception as e:
-    print(f'执行过程中出现错误: {e}')
-    sys.exit(1)
-"
+      run: python scripts/notify_cn_market.py
