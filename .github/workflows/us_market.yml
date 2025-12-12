@@ -1,0 +1,71 @@
+name: US Market Data Notification
+
+on:
+  schedule:
+    # 每天早上6:00执行（UTC时间需要转换）
+    - cron: '0 22 * * *'  # UTC时间22:00对应北京时间早上6:00
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  notify-us-market:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Get US market data and send notification
+      env:
+        BARK_URL: ${{ secrets.BARK_URL }}
+      run: |
+        python -c "
+import sys
+sys.path.append('./src')
+from scraper import MarketDataScraper
+from bark_notifier import BarkNotifier
+from config import Config
+
+try:
+    # 检查是否为交易日
+    if not MarketDataScraper.is_trading_day():
+        print('今天不是交易日，跳过推送')
+        sys.exit(0)
+    
+    # 获取美股数据
+    print('正在获取美股数据...')
+    us_data = MarketDataScraper.get_us_market_data(Config.US_INDICES)
+    
+    if not us_data:
+        print('未能获取到美股数据')
+        sys.exit(1)
+    
+    # 格式化数据
+    content = MarketDataScraper.format_market_data(us_data, 'us')
+    print('格式化后的数据:')
+    print(content)
+    
+    # 发送推送
+    notifier = BarkNotifier()
+    success = notifier.send_stock_notification(content, 'us')
+    
+    if success:
+        print('美股数据推送成功')
+        sys.exit(0)
+    else:
+        print('美股数据推送失败')
+        sys.exit(1)
+        
+except Exception as e:
+    print(f'执行过程中出现错误: {e}')
+    sys.exit(1)
+"
